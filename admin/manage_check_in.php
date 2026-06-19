@@ -47,7 +47,7 @@ if (!empty($meta['guest_id'])) {
   <div class="alert alert-info py-2 mb-3">
     <i class="fa fa-bed mr-1"></i>
     <strong><?php echo htmlspecialchars($rm['room']??''); ?></strong> — <?php echo htmlspecialchars($rm['name']??''); ?>
-    &bull; <strong>$<?php echo number_format($rm['price']??0,2); ?>/night</strong>
+    &bull; <strong>KES <?php echo number_format($rm['price']??0,2); ?>/night</strong>
   </div>
   <?php endif; ?>
   <?php endif; ?>
@@ -66,10 +66,10 @@ if (!empty($meta['guest_id'])) {
     <input type="hidden" name="guest_id" id="guest-id" value="<?php echo $meta['guest_id']??''; ?>">
     <div id="guest-results" class="list-group mt-1" style="position:absolute;z-index:1000;width:94%;display:none"></div>
     <?php if (!empty($guest_prefs)): ?>
-    <div class="mt-1 p-2 bg-light rounded" id="guest-prefs-display">
+    <div class="mt-1 p-2 rounded" id="guest-prefs-display" style="background:var(--bg-elevated);border:1px solid var(--border-subtle)">
       <small class="text-muted">Preferences: </small>
       <?php foreach($guest_prefs as $gp): ?>
-      <span class="badge badge-light mr-1"><?php echo htmlspecialchars($gp['pref_key']); ?>: <?php echo htmlspecialchars($gp['pref_value']); ?></span>
+      <span class="badge badge-secondary mr-1"><?php echo htmlspecialchars($gp['pref_key']); ?>: <?php echo htmlspecialchars($gp['pref_value']); ?></span>
       <?php endforeach; ?>
     </div>
     <?php endif; ?>
@@ -114,7 +114,7 @@ if (!empty($meta['guest_id'])) {
   </div>
 
   <!-- Estimated cost preview -->
-  <div id="cost-preview" class="alert alert-light border" style="display:none">
+  <div id="cost-preview" class="alert border" style="display:none;background:var(--bg-elevated);border-color:var(--border-subtle)!important;color:var(--text-primary)">
     <i class="fa fa-calculator mr-1"></i>
     Estimated room charge: <strong id="cost-amount">—</strong>
   </div>
@@ -139,7 +139,7 @@ function updateCostPreview() {
   }
   if (pricePerNight > 0) {
     var total = (pricePerNight * days).toFixed(2);
-    $('#cost-amount').text('$' + total + ' (' + days + ' night' + (days>1?'s':'') + ' × $' + pricePerNight.toFixed(2) + ')');
+    $('#cost-amount').text('KES ' + total + ' (' + days + ' night' + (days>1?'s':'') + ' × KES ' + pricePerNight.toFixed(2) + ')');
     $('#cost-preview').show();
   }
 }

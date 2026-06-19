@@ -30,7 +30,7 @@ $gname  = $meta['guest_name'] ?: $meta['name'];
 <div class="container-fluid">
 
   <!-- Guest Summary -->
-  <div class="alert <?php echo $meta['is_vip']?'alert-warning':'alert-light'; ?> border mb-3">
+  <div class="alert border mb-3" style="<?php echo $meta['is_vip']?'background:rgba(196,145,58,0.12);border-color:rgba(196,145,58,0.35)!important':'background:var(--bg-elevated);border-color:var(--border-subtle)!important'; ?>">
     <div class="row">
       <div class="col-md-6">
         <div class="text-muted small">Guest</div>
@@ -43,7 +43,7 @@ $gname  = $meta['guest_name'] ?: $meta['name'];
         <div class="text-muted small">Room</div>
         <strong><?php echo htmlspecialchars($meta['room']??'—'); ?></strong>
         <div class="small text-muted"><?php echo htmlspecialchars($meta['category']??''); ?></div>
-        <div class="small text-muted">$<?php echo number_format($meta['price']??0,2); ?>/night</div>
+        <div class="small text-muted">KES <?php echo number_format($meta['price']??0,2); ?>/night</div>
       </div>
       <div class="col-md-3">
         <div class="text-muted small">Stay Duration</div>
@@ -73,11 +73,11 @@ $gname  = $meta['guest_name'] ?: $meta['name'];
     </div>
     <div class="card-body py-2">
       <div class="row text-center">
-        <div class="col-4"><div class="text-muted small">Total</div><strong>$<?php echo number_format($meta['total']??0,2); ?></strong></div>
-        <div class="col-4"><div class="text-muted small">Paid</div><strong class="text-success">$<?php echo number_format($meta['amount_paid']??0,2); ?></strong></div>
+        <div class="col-4"><div class="text-muted small">Total</div><strong>KES <?php echo number_format($meta['total']??0,2); ?></strong></div>
+        <div class="col-4"><div class="text-muted small">Paid</div><strong class="text-success">KES <?php echo number_format($meta['amount_paid']??0,2); ?></strong></div>
         <div class="col-4"><div class="text-muted small">Balance</div>
           <strong class="<?php echo ($meta['balance']??0)>0?'text-danger':'text-success'; ?>">
-            $<?php echo number_format($meta['balance']??0,2); ?>
+            KES <?php echo number_format($meta['balance']??0,2); ?>
           </strong>
         </div>
       </div>
@@ -85,7 +85,7 @@ $gname  = $meta['guest_name'] ?: $meta['name'];
       <?php if (($meta['balance']??0) > 0): ?>
       <div class="text-center mt-2">
         <button class="btn btn-sm btn-success" onclick="uni_modal('Record Payment','manage_payment.php?invoice_id=<?php echo $meta['invoice_id']; ?>')">
-          <i class="fa fa-dollar-sign mr-1"></i>Collect Payment ($<?php echo number_format($meta['balance'],2); ?> due)
+          <i class="fa fa-money-bill-wave mr-1"></i>Collect Payment (KES <?php echo number_format($meta['balance'],2); ?> due)
         </button>
       </div>
       <?php else: ?>
@@ -96,7 +96,7 @@ $gname  = $meta['guest_name'] ?: $meta['name'];
   <?php else: ?>
   <div class="alert alert-warning mb-3">
     <i class="fa fa-exclamation-triangle mr-1"></i>No invoice found for this stay.
-    Amount due (estimated): <strong>$<?php echo number_format(($meta['price']??0)*$nights,2); ?></strong>
+    Amount due (estimated): <strong>KES <?php echo number_format(($meta['price']??0)*$nights,2); ?></strong>
   </div>
   <?php endif; ?>
 

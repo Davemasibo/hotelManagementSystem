@@ -1,27 +1,23 @@
+<?php
+  session_start();
+  if (!isset($_SESSION['login_id'])) {
+    header('location:login.php');
+    exit;
+  }
+?>
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
   <meta charset="utf-8">
   <meta content="width=device-width, initial-scale=1.0" name="viewport">
-
-  <title>Hotel Management System</title>
- 	
-
-<?php
-	session_start();
-  if(!isset($_SESSION['login_id']))
-    header('location:login.php');
- include('./header.php'); 
- // include('./auth.php'); 
- ?>
-
+  <title><?php echo htmlspecialchars($_SESSION['setting_hotel_name'] ?? 'Hotel Management System'); ?></title>
+<?php include('./header.php'); ?>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/dashboard.css">
 </head>
-<style>
-	body{
-        background: #80808045;
-  }
-</style>
 
 <body>
 	<?php include 'topbar.php' ?>

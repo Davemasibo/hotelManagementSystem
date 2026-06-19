@@ -85,18 +85,18 @@ $status_colors=['draft'=>'secondary','issued'=>'warning','partial'=>'info','paid
     <div class="card-header py-2"><strong>Line Items</strong></div>
     <div class="card-body p-0">
       <table class="table table-sm mb-0" id="items-table">
-        <thead class="thead-light">
+        <thead>
           <tr><th>Description</th><th>Type</th><th>Qty</th><th>Unit Price</th><th>Amount</th><th></th></tr>
         </thead>
         <tbody id="items-body">
           <?php while ($item = $items->fetch_assoc()): ?>
           <tr id="item-row-<?php echo $item['id']; ?>">
             <td><?php echo htmlspecialchars($item['description']); ?></td>
-            <td><span class="badge badge-light"><?php echo ucwords(str_replace('_',' ',$item['item_type'])); ?></span></td>
+            <td><span class="badge badge-secondary"><?php echo ucwords(str_replace('_',' ',$item['item_type'])); ?></span></td>
             <td><?php echo number_format($item['quantity'],2); ?></td>
-            <td>$<?php echo number_format($item['unit_price'],2); ?></td>
+            <td>KES <?php echo number_format($item['unit_price'],2); ?></td>
             <td class="<?php echo $item['item_type']==='discount'?'text-danger':''; ?>">
-              <?php echo $item['item_type']==='discount'?'-':''; ?>$<?php echo number_format($item['amount'],2); ?>
+              <?php echo $item['item_type']==='discount'?'-':''; ?>KES <?php echo number_format($item['amount'],2); ?>
             </td>
             <td>
               <?php if (!in_array($inv['status'],['paid','cancelled','refunded'])): ?>
@@ -109,17 +109,17 @@ $status_colors=['draft'=>'secondary','issued'=>'warning','partial'=>'info','paid
           </tr>
           <?php endwhile; ?>
         </tbody>
-        <tfoot class="font-weight-bold bg-light">
-          <tr><td colspan="4" class="text-right">Subtotal</td><td id="foot-subtotal">$<?php echo number_format($inv['subtotal'],2); ?></td><td></td></tr>
+        <tfoot class="font-weight-bold" style="background:var(--bg-elevated)">
+          <tr><td colspan="4" class="text-right">Subtotal</td><td id="foot-subtotal">KES <?php echo number_format($inv['subtotal'],2); ?></td><td></td></tr>
           <?php if ($inv['discount_amount']>0): ?>
-          <tr><td colspan="4" class="text-right text-danger">Discount</td><td class="text-danger" id="foot-discount">-$<?php echo number_format($inv['discount_amount'],2); ?></td><td></td></tr>
+          <tr><td colspan="4" class="text-right text-danger">Discount</td><td class="text-danger" id="foot-discount">-KES <?php echo number_format($inv['discount_amount'],2); ?></td><td></td></tr>
           <?php endif; ?>
           <?php if ($inv['tax_rate']>0): ?>
-          <tr><td colspan="4" class="text-right">Tax (<?php echo $inv['tax_rate']; ?>%)</td><td id="foot-tax">$<?php echo number_format($inv['tax_amount'],2); ?></td><td></td></tr>
+          <tr><td colspan="4" class="text-right">Tax (<?php echo $inv['tax_rate']; ?>%)</td><td id="foot-tax">KES <?php echo number_format($inv['tax_amount'],2); ?></td><td></td></tr>
           <?php endif; ?>
-          <tr class="table-dark"><td colspan="4" class="text-right">TOTAL</td><td id="foot-total">$<?php echo number_format($inv['total'],2); ?></td><td></td></tr>
-          <tr><td colspan="4" class="text-right text-success">Paid</td><td class="text-success" id="foot-paid">$<?php echo number_format($inv['amount_paid'],2); ?></td><td></td></tr>
-          <tr><td colspan="4" class="text-right text-danger">Balance Due</td><td class="text-danger font-weight-bold" id="foot-balance">$<?php echo number_format($inv['balance'],2); ?></td><td></td></tr>
+          <tr style="background:rgba(196,145,58,0.12)"><td colspan="4" class="text-right font-weight-bold">TOTAL</td><td id="foot-total" style="color:var(--brand)">KES <?php echo number_format($inv['total'],2); ?></td><td></td></tr>
+          <tr><td colspan="4" class="text-right text-success">Paid</td><td class="text-success" id="foot-paid">KES <?php echo number_format($inv['amount_paid'],2); ?></td><td></td></tr>
+          <tr><td colspan="4" class="text-right text-danger">Balance Due</td><td class="text-danger font-weight-bold" id="foot-balance">KES <?php echo number_format($inv['balance'],2); ?></td><td></td></tr>
         </tfoot>
       </table>
     </div>
@@ -155,7 +155,7 @@ $status_colors=['draft'=>'secondary','issued'=>'warning','partial'=>'info','paid
     </div>
     <div class="card-body p-0">
       <table class="table table-sm mb-0">
-        <thead class="thead-light"><tr><th>Date</th><th>Method</th><th>Amount</th><th>Reference</th><th>Staff</th></tr></thead>
+        <thead><tr><th>Date</th><th>Method</th><th>Amount</th><th>Reference</th><th>Staff</th></tr></thead>
         <tbody>
         <?php
         $has_payments = false;
@@ -164,8 +164,8 @@ $status_colors=['draft'=>'secondary','issued'=>'warning','partial'=>'info','paid
         ?>
           <tr>
             <td><?php echo substr($pay['created_at'],0,16); ?></td>
-            <td><span class="badge badge-light"><?php echo ucwords(str_replace('_',' ',$pay['payment_method'])); ?></span></td>
-            <td class="text-success font-weight-bold">$<?php echo number_format($pay['amount'],2); ?></td>
+            <td><span class="badge badge-secondary"><?php echo ucwords(str_replace('_',' ',$pay['payment_method'])); ?></span></td>
+            <td class="text-success font-weight-bold">KES <?php echo number_format($pay['amount'],2); ?></td>
             <td><?php echo htmlspecialchars($pay['reference']??'—'); ?></td>
             <td><?php echo htmlspecialchars($pay['staff']??'—'); ?></td>
           </tr>
@@ -220,11 +220,11 @@ function deleteItem(itemId, invoiceId) {
 }
 
 function updateTotals(t) {
-  $('#foot-subtotal').text('$'+parseFloat(t.subtotal).toFixed(2));
-  $('#foot-tax').text('$'+parseFloat(t.tax_amount).toFixed(2));
-  $('#foot-discount').text('-$'+parseFloat(t.discount).toFixed(2));
-  $('#foot-total').text('$'+parseFloat(t.total).toFixed(2));
-  $('#foot-paid').text('$'+parseFloat(t.paid).toFixed(2));
-  $('#foot-balance').text('$'+parseFloat(t.balance).toFixed(2));
+  $('#foot-subtotal').text('KES '+parseFloat(t.subtotal).toFixed(2));
+  $('#foot-tax').text('KES '+parseFloat(t.tax_amount).toFixed(2));
+  $('#foot-discount').text('-KES '+parseFloat(t.discount).toFixed(2));
+  $('#foot-total').text('KES '+parseFloat(t.total).toFixed(2));
+  $('#foot-paid').text('KES '+parseFloat(t.paid).toFixed(2));
+  $('#foot-balance').text('KES '+parseFloat(t.balance).toFixed(2));
 }
 </script>

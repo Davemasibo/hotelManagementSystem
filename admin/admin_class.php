@@ -148,7 +148,8 @@ class Action {
         $password = $_POST['password'] ?? '';
         if (empty($username) || empty($password)) return 3;
 
-        $stmt = $this->db->prepare("SELECT * FROM users WHERE username = ? AND is_active = 1 LIMIT 1");
+        // Fetch by username regardless of status so we can return specific codes
+        $stmt = $this->db->prepare("SELECT * FROM users WHERE username = ? LIMIT 1");
         $stmt->bind_param("s", $username);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -156,8 +157,13 @@ class Action {
 
         if ($result->num_rows > 0) {
             $user  = $result->fetch_assoc();
-            $valid = false;
 
+            // Return code 4 for pending accounts
+            if (($user['status'] ?? 'active') === 'pending') return 4;
+            // Return code 3 for inactive/rejected
+            if (!$user['is_active'] || ($user['status'] ?? 'active') === 'rejected') return 3;
+
+            $valid = false;
             // Detect bcrypt hash vs. legacy plaintext
             if (strlen($user['password']) === 60 && substr($user['password'], 0, 4) === '$2y$') {
                 $valid = password_verify($password, $user['password']);
@@ -204,19 +210,23 @@ class Action {
     // =====================================================
 
     function save_user() {
-        $id       = (int)($_POST['id'] ?? 0);
-        $name     = $this->clean($_POST['name'] ?? '');
-        $username = $this->clean($_POST['username'] ?? '');
-        $password = $_POST['password'] ?? '';
-        $type     = (int)($_POST['type'] ?? 2);
+        $id        = (int)($_POST['id'] ?? 0);
+        $name      = $this->clean($_POST['name'] ?? '');
+        $username  = $this->clean($_POST['username'] ?? '');
+        $password  = $_POST['password'] ?? '';
+        $type      = (int)($_POST['type'] ?? 2);
+        $email     = $this->clean($_POST['email'] ?? '');
+        $phone     = $this->clean($_POST['phone'] ?? '');
+        $status    = in_array($_POST['status'] ?? '', ['active','pending','rejected']) ? $_POST['status'] : 'active';
+        $is_active = isset($_POST['is_active']) ? (int)$_POST['is_active'] : 1;
 
         if (empty($name) || empty($username)) return 0;
 
         if (empty($id)) {
             if (empty($password)) return 0;
             $hashed = password_hash($password, PASSWORD_BCRYPT);
-            $stmt   = $this->db->prepare("INSERT INTO users (name,username,password,type) VALUES (?,?,?,?)");
-            $stmt->bind_param("sssi", $name, $username, $hashed, $type);
+            $stmt   = $this->db->prepare("INSERT INTO users (name,username,password,type,email,phone,status,is_active) VALUES (?,?,?,?,?,?,?,?)");
+            $stmt->bind_param("ssssissi", $name, $username, $hashed, $type, $email, $phone, $status, $is_active);
             $ok = $stmt->execute();
             $nid = $this->db->insert_id;
             $stmt->close();
@@ -224,11 +234,11 @@ class Action {
         } else {
             if (!empty($password)) {
                 $hashed = password_hash($password, PASSWORD_BCRYPT);
-                $stmt   = $this->db->prepare("UPDATE users SET name=?,username=?,password=?,type=? WHERE id=?");
-                $stmt->bind_param("sssii", $name, $username, $hashed, $type, $id);
+                $stmt   = $this->db->prepare("UPDATE users SET name=?,username=?,password=?,type=?,email=?,phone=?,status=?,is_active=? WHERE id=?");
+                $stmt->bind_param("ssssissii", $name, $username, $hashed, $type, $email, $phone, $status, $is_active, $id);
             } else {
-                $stmt = $this->db->prepare("UPDATE users SET name=?,username=?,type=? WHERE id=?");
-                $stmt->bind_param("ssii", $name, $username, $type, $id);
+                $stmt = $this->db->prepare("UPDATE users SET name=?,username=?,type=?,email=?,phone=?,status=?,is_active=? WHERE id=?");
+                $stmt->bind_param("sssissii", $name, $username, $type, $email, $phone, $status, $is_active, $id);
             }
             $ok = $stmt->execute();
             $stmt->close();
@@ -237,15 +247,53 @@ class Action {
         return 0;
     }
 
+    function approve_user() {
+        $id = (int)($_POST['id'] ?? 0);
+        if (!$id) return json_encode(['status' => 'error', 'message' => 'Invalid ID']);
+        $stmt = $this->db->prepare("UPDATE users SET status = 'active', is_active = 1 WHERE id = ? AND status = 'pending'");
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+        $affected = $stmt->affected_rows;
+        $stmt->close();
+        if ($affected > 0) {
+            $this->log_action('approve', 'users', $id, 'Approved pending user');
+            return json_encode(['status' => 'ok']);
+        }
+        return json_encode(['status' => 'error', 'message' => 'User not found or already processed']);
+    }
+
+    function reject_user() {
+        $id = (int)($_POST['id'] ?? 0);
+        if (!$id) return json_encode(['status' => 'error', 'message' => 'Invalid ID']);
+        $stmt = $this->db->prepare("DELETE FROM users WHERE id = ? AND status = 'pending'");
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+        $affected = $stmt->affected_rows;
+        $stmt->close();
+        if ($affected > 0) {
+            $this->log_action('reject', 'users', $id, 'Rejected pending user signup');
+            return json_encode(['status' => 'ok']);
+        }
+        return json_encode(['status' => 'error', 'message' => 'User not found or already processed']);
+    }
+
     // =====================================================
     // SETTINGS
     // =====================================================
 
     function save_settings() {
-        $name    = $this->clean($_POST['name']    ?? '');
-        $email   = $this->clean($_POST['email']   ?? '');
-        $contact = $this->clean($_POST['contact'] ?? '');
-        $about   = htmlentities(str_replace("'", "&#x2019;", $_POST['about'] ?? ''));
+        $name          = $this->clean($_POST['name']               ?? '');
+        $email         = $this->clean($_POST['email']              ?? '');
+        $contact       = $this->clean($_POST['contact']            ?? '');
+        $tagline       = $this->clean($_POST['tagline']            ?? '');
+        $address       = $this->clean($_POST['address']            ?? '');
+        $currency      = $this->clean($_POST['currency']           ?? 'KES');
+        $checkin_time  = $this->clean($_POST['checkin_time']       ?? '14:00');
+        $checkout_time = $this->clean($_POST['checkout_time']      ?? '11:00');
+        $default_tax   = (float)($_POST['default_tax']             ?? 0);
+        $max_rooms     = (int)($_POST['max_rooms_per_floor']       ?? 20);
+        $inv_prefix    = $this->clean($_POST['invoice_prefix']     ?? 'INV');
+        $about         = htmlentities(str_replace("'", "&#x2019;", $_POST['about'] ?? ''));
 
         $img = '';
         if (!empty($_FILES['img']['tmp_name'])) {
@@ -257,15 +305,31 @@ class Action {
         if ($chk->num_rows > 0) {
             $eid = (int)$chk->fetch_assoc()['id'];
             if ($img) {
-                $stmt = $this->db->prepare("UPDATE system_settings SET hotel_name=?,email=?,contact=?,about_content=?,cover_img=? WHERE id=?");
-                $stmt->bind_param("sssssi", $name, $email, $contact, $about, $img, $eid);
+                $stmt = $this->db->prepare(
+                    "UPDATE system_settings SET hotel_name=?,email=?,contact=?,about_content=?,cover_img=?,
+                     tagline=?,address=?,currency=?,checkin_time=?,checkout_time=?,default_tax=?,max_rooms_per_floor=?,invoice_prefix=?
+                     WHERE id=?"
+                );
+                // 10×s + d + i + s + i = 14
+                $stmt->bind_param("ssssssssssdisi", $name, $email, $contact, $about, $img,
+                    $tagline, $address, $currency, $checkin_time, $checkout_time, $default_tax, $max_rooms, $inv_prefix, $eid);
             } else {
-                $stmt = $this->db->prepare("UPDATE system_settings SET hotel_name=?,email=?,contact=?,about_content=? WHERE id=?");
-                $stmt->bind_param("ssssi", $name, $email, $contact, $about, $eid);
+                $stmt = $this->db->prepare(
+                    "UPDATE system_settings SET hotel_name=?,email=?,contact=?,about_content=?,
+                     tagline=?,address=?,currency=?,checkin_time=?,checkout_time=?,default_tax=?,max_rooms_per_floor=?,invoice_prefix=?
+                     WHERE id=?"
+                );
+                // 9×s + d + i + s + i = 13
+                $stmt->bind_param("sssssssssdisi", $name, $email, $contact, $about,
+                    $tagline, $address, $currency, $checkin_time, $checkout_time, $default_tax, $max_rooms, $inv_prefix, $eid);
             }
         } else {
-            $stmt = $this->db->prepare("INSERT INTO system_settings (hotel_name,email,contact,about_content,cover_img) VALUES (?,?,?,?,?)");
-            $stmt->bind_param("sssss", $name, $email, $contact, $about, $img);
+            $stmt = $this->db->prepare(
+                "INSERT INTO system_settings (hotel_name,email,contact,about_content,cover_img,tagline,address,currency,checkin_time,checkout_time,default_tax,max_rooms_per_floor,invoice_prefix)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+            );
+            $stmt->bind_param("ssssssssssdis", $name, $email, $contact, $about, $img,
+                $tagline, $address, $currency, $checkin_time, $checkout_time, $default_tax, $max_rooms, $inv_prefix);
         }
         $ok = $stmt->execute();
         $stmt->close();

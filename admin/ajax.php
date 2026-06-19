@@ -16,6 +16,12 @@ if ($action === 'logout') {
 if ($action === 'save_user') {
     echo $crud->save_user(); exit;
 }
+if ($action === 'approve_user') {
+    echo $crud->approve_user(); exit;
+}
+if ($action === 'reject_user') {
+    echo $crud->reject_user(); exit;
+}
 if ($action === 'save_settings') {
     echo $crud->save_settings(); exit;
 }
