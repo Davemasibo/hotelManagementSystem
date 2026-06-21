@@ -4,6 +4,7 @@
 -- Reference date assumed: 2026-06-19 (current month June 2026).
 -- Idempotent: deletes prior DEMO rows first, then re-inserts.
 -- All demo records are marked:
+--   users.email        LIKE '%@demo.local'
 --   guests.email       LIKE '%@demo.local'
 --   rooms.description  = 'DEMO_ROOM'
 --   checked.ref_no     LIKE 'DEMO-%'
@@ -15,6 +16,7 @@ USE hotel_db;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ---------- CLEANUP PRIOR DEMO DATA ----------
+DELETE FROM users          WHERE email LIKE '%@demo.local';
 DELETE FROM payments       WHERE invoice_id IN (SELECT id FROM invoices WHERE invoice_no LIKE 'DEMO-INV-%');
 DELETE FROM invoice_items  WHERE invoice_id IN (SELECT id FROM invoices WHERE invoice_no LIKE 'DEMO-INV-%');
 DELETE FROM invoices       WHERE invoice_no LIKE 'DEMO-INV-%';
@@ -26,6 +28,22 @@ DELETE FROM rooms           WHERE description = 'DEMO_ROOM';
 DELETE FROM guests          WHERE email LIKE '%@demo.local';
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- =====================================================
+-- DEMO USERS (staff portal logins)
+-- Passwords are stored as the plaintext seed value and are
+-- transparently upgraded to a bcrypt hash on first login
+-- (same mechanism as the default `admin` account).
+--   demo / demo123       -> active staff, can log in immediately
+--   applicant / —        -> pending signup, shows in the
+--                            Admin > Users "Pending Approvals" queue
+--                            so the approval flow can be demoed
+-- =====================================================
+INSERT INTO users (name, email, phone, username, password, type, is_active, status)
+VALUES ('Demo Staff','demo@demo.local','+254700100200','demo','demo123',2,1,'active');
+
+INSERT INTO users (name, email, phone, username, password, type, is_active, status)
+VALUES ('Pending Applicant','applicant@demo.local','+254700100201','applicant','applicant123',2,0,'pending');
 
 -- ---------- GUESTS ----------
 INSERT INTO guests (full_name, email, phone, id_type, id_number, nationality, is_vip, vip_note, total_stays, notes)
