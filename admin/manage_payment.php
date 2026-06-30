@@ -71,7 +71,7 @@ $('#payment-form').submit(function(e) {
   start_load();
   $.post('ajax.php?action=save_payment', $(this).serialize(), function(resp) {
     end_load();
-    var r = JSON.parse(resp);
+    var r = (typeof resp === 'string') ? JSON.parse(resp) : resp;
     if (r.status === 'ok') {
       alert_toast('Payment recorded successfully', 'success');
       setTimeout(function() {

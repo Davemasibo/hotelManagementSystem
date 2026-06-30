@@ -186,7 +186,7 @@ $('#inv-settings-form').submit(function(e) {
   start_load();
   $.post('ajax.php?action=update_invoice', $(this).serialize(), function(resp) {
     end_load();
-    var r = JSON.parse(resp);
+    var r = (typeof resp === 'string') ? JSON.parse(resp) : resp;
     if (r.status === 'ok') { updateTotals(r.totals); alert_toast('Invoice updated','success'); }
   });
 });
@@ -196,7 +196,7 @@ $('#add-item-form').submit(function(e) {
   start_load();
   $.post('ajax.php?action=add_invoice_item', $(this).serialize(), function(resp) {
     end_load();
-    var r = JSON.parse(resp);
+    var r = (typeof resp === 'string') ? JSON.parse(resp) : resp;
     if (r.status === 'ok') {
       alert_toast('Item added','success');
       setTimeout(function(){ location.reload(); }, 800);
@@ -211,7 +211,7 @@ function deleteItem(itemId, invoiceId) {
   start_load();
   $.post('ajax.php?action=delete_invoice_item', {id: itemId, invoice_id: invoiceId}, function(resp) {
     end_load();
-    var r = JSON.parse(resp);
+    var r = (typeof resp === 'string') ? JSON.parse(resp) : resp;
     if (r.status === 'ok') {
       $('#item-row-'+itemId).remove();
       updateTotals(r.totals);

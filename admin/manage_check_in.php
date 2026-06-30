@@ -196,8 +196,16 @@ $('#manage-check').submit(function(e) {
     data: $(this).serialize(),
     success: function(resp) {
       end_load();
+      // jQuery auto-parses application/json responses into an object, so `resp`
+      // may already be an object here. Only JSON.parse when it's still a string,
+      // and keep the numeric-string fallback for legacy plain-number responses.
       var r;
-      try { r = JSON.parse(resp); } catch(e) { r = {status: resp > 0 ? 'ok' : 'error', id: parseInt(resp)}; }
+      if (resp && typeof resp === 'object') {
+        r = resp;
+      } else {
+        try { r = JSON.parse(resp); }
+        catch(e) { var n = parseInt(resp); r = {status: n > 0 ? 'ok' : 'error', id: n}; }
+      }
       if (r.status === 'ok' || r.id > 0) {
         alert_toast('Check-in successful!', 'success');
         if (r.invoice_id) {

@@ -12,7 +12,9 @@ class Action {
 
     public function __destruct() {
         if ($this->db) $this->db->close();
-        ob_end_flush();
+        // The JSON endpoint may have already drained the buffers before exit;
+        // only flush if one is still open to avoid a stray "no buffer" notice.
+        if (ob_get_level() > 0) ob_end_flush();
     }
 
     // =====================================================

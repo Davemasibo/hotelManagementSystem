@@ -298,7 +298,7 @@ function updateTaskStatus(taskId, newStatus) {
   start_load();
   $.post('ajax.php?action=update_task_status', {id: taskId, status: newStatus}, function(resp) {
     end_load();
-    var r = JSON.parse(resp);
+    var r = (typeof resp === 'string') ? JSON.parse(resp) : resp;
     if (r.status === 'ok') {
       alert_toast('Task updated', 'success');
       setTimeout(function() { location.reload(); }, 800);

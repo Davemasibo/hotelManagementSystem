@@ -39,6 +39,14 @@ Document root is typically `/var/www/html` → clone into `/var/www/html/hotel`.
 **Minimum versions:** PHP 7.4+ (8.x recommended), MySQL 5.7+ / MariaDB 10.4+.
 The PHP **mysqli** extension is required (bundled with XAMPP, `php-mysqli` on Linux).
 
+> ⚠️ **PHP 7.0 is a hard floor.** The app uses the `??` null‑coalescing operator
+> throughout. On an older XAMPP (PHP 5.x) every page dies with
+> `Parse error: syntax error, unexpected '?' in ... on line 16`. If you see that,
+> your PHP is too old — **upgrade XAMPP to a PHP 8.x build**, don't edit the code.
+> Check the version Apache actually uses with `C:\xampp\php\php.exe -v` and
+> `Select-String -Path C:\xampp\apache\conf\extra\httpd-xampp.conf -Pattern "LoadModule php"`
+> (it should reference `php8apache2_4.dll`, not `php5apache2_4.dll`).
+
 ---
 
 ## 2. Get the code
@@ -71,18 +79,27 @@ matches out of the box.
 
 ### Create the empty database
 
+> ⚠️ The import files in step 4 are a base **dump + incremental migrations** — they
+> are designed to run **once against an empty database**. Importing them into a
+> database that already has the tables fails with `ERROR 1050 (Table ... already
+> exists)`. The commands below **drop any existing `hotel_db` first** so you always
+> start from a clean slate. On a brand-new machine the `DROP` is simply a no-op.
+> **This deletes all current data in `hotel_db`** — only what you want for a fresh
+> setup or a reset.
+
 **Via command line (Windows / XAMPP):**
 ```powershell
-& "C:\xampp\mysql\bin\mysql.exe" -u root -e "CREATE DATABASE IF NOT EXISTS hotel_db CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+& "C:\xampp\mysql\bin\mysql.exe" -u root -e "DROP DATABASE IF EXISTS hotel_db; CREATE DATABASE hotel_db CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
 ```
 
 **Via command line (Linux):**
 ```bash
-mysql -u root -e "CREATE DATABASE IF NOT EXISTS hotel_db CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+mysql -u root -e "DROP DATABASE IF EXISTS hotel_db; CREATE DATABASE hotel_db CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
 ```
 
-**Or via phpMyAdmin (GUI):** open <http://localhost/phpmyadmin> → **New** → name it
-`hotel_db` → **Create**.
+**Or via phpMyAdmin (GUI):** open <http://localhost/phpmyadmin> → if a `hotel_db`
+already exists, select it → **Operations** → **Drop the database (DROP)**. Then
+**New** → name it `hotel_db` → **Create**.
 
 > **Different MySQL credentials?** If your MySQL `root` has a password, or you use a
 > different DB name/user, edit **`admin/db_connect.php`** line 3:
@@ -218,7 +235,10 @@ harden it:
 
 | Symptom | Fix |
 |---------|-----|
+| `Parse error: syntax error, unexpected '?' ... login.php on line 16` | Apache is running **PHP < 7.0** (old XAMPP). The `??` operator needs PHP 7.0+. Upgrade XAMPP to a PHP 8.x build — see the ⚠️ note under "Minimum versions". Works on another PC but not this one = that PC has an older XAMPP. |
 | "Database Setup Required" page | DB not created or tables not imported — redo steps 3–4 |
+| `ERROR 1050 ... Table 'checked' already exists` (or any "already exists") | `hotel_db` already has tables — you're importing into a non-empty DB. Reset it: re-run the **drop + create** command in step 3, then re-import all files in step 4 in order. |
+| `ERROR 1060 ... Duplicate column` on a migration | Same cause — the migration was already applied. Reset the DB (step 3) and import the full sequence once. |
 | `Access denied for user 'root'@'localhost'` | MySQL root has a password — set it in `admin/db_connect.php` |
 | Port 80 already in use (Apache won't start) | Stop IIS / Skype / another web server, or change Apache's port in XAMPP → Config → `httpd.conf` |
 | Port 3306 in use (MySQL won't start) | Another MySQL/MariaDB instance is running — stop it or change the port |

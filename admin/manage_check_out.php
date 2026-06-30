@@ -139,8 +139,10 @@ $('#checkout-btn').click(function() {
     data: { id: '<?php echo $id; ?>', rid: '<?php echo $meta['room_id']; ?>' },
     success: function(resp) {
       end_load();
+      // jQuery auto-parses application/json into an object; only JSON.parse a string.
       var r;
-      try { r = JSON.parse(resp); } catch(e) { r = {status: resp==1?'ok':'error'}; }
+      if (resp && typeof resp === 'object') { r = resp; }
+      else { try { r = JSON.parse(resp); } catch(e) { r = {status: resp==1?'ok':'error'}; } }
       if (r.status === 'ok') {
         alert_toast('Check-out completed! Housekeeping task created.', 'success');
         setTimeout(function() { location.reload(); }, 1600);

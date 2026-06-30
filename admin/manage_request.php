@@ -77,7 +77,7 @@ $('#req-form').submit(function(e) {
   start_load();
   $.post('ajax.php?action=save_guest_request', $(this).serialize(), function(resp) {
     end_load();
-    var r = JSON.parse(resp);
+    var r = (typeof resp === 'string') ? JSON.parse(resp) : resp;
     if (r.status === 'ok') {
       alert_toast('Request updated','success');
       setTimeout(function(){ $('#uni_modal').modal('hide'); location.reload(); }, 1200);

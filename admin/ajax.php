@@ -1,4 +1,20 @@
 <?php
+/*
+ * JSON API endpoint.
+ *
+ * This is a machine-consumed endpoint: the response body must be PURE JSON.
+ * If a PHP warning/notice/deprecation is ever emitted while a handler runs,
+ * display_errors would inject that text into the body ahead of the JSON,
+ * breaking JSON.parse() on the client. The client's fallback then reports a
+ * false "failed" even though the database write already committed (this is
+ * exactly what produced the spurious "Check-in failed" message).
+ *
+ * So: never DISPLAY errors here (still LOG them), and discard any stray output
+ * captured in the buffers before emitting the JSON.
+ */
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
 ob_start();
 header('Content-Type: application/json');
 
@@ -6,104 +22,61 @@ $action = $_GET['action'] ?? '';
 include 'admin_class.php';
 $crud = new Action();
 
-// ── Legacy actions (preserve numeric return codes) ──────────────────────────
-if ($action === 'login') {
-    $r = $crud->login(); echo $r; exit;
-}
+// logout performs a redirect and emits no body — handle it directly.
 if ($action === 'logout') {
-    $crud->logout(); exit;
-}
-if ($action === 'save_user') {
-    echo $crud->save_user(); exit;
-}
-if ($action === 'approve_user') {
-    echo $crud->approve_user(); exit;
-}
-if ($action === 'reject_user') {
-    echo $crud->reject_user(); exit;
-}
-if ($action === 'save_settings') {
-    echo $crud->save_settings(); exit;
-}
-if ($action === 'save_category') {
-    echo $crud->save_category(); exit;
-}
-if ($action === 'delete_category') {
-    echo $crud->delete_category(); exit;
-}
-if ($action === 'save_room') {
-    echo $crud->save_room(); exit;
-}
-if ($action === 'delete_room') {
-    echo $crud->delete_room(); exit;
+    $crud->logout();
+    exit;
 }
 
-// ── Enhanced check-in/out (return JSON) ─────────────────────────────────────
-if ($action === 'save_check-in') {
-    echo $crud->save_check_in(); exit;
-}
-if ($action === 'save_checkout') {
-    echo $crud->save_checkout(); exit;
-}
-if ($action === 'save_book') {
-    echo $crud->save_book(); exit;
+// action => Action method. Everything here returns a string to send verbatim.
+$routes = [
+    // Auth / legacy (numeric return codes preserved)
+    'login'                 => 'login',
+    'save_user'             => 'save_user',
+    'approve_user'          => 'approve_user',
+    'reject_user'           => 'reject_user',
+    'save_settings'         => 'save_settings',
+    'save_category'         => 'save_category',
+    'delete_category'       => 'delete_category',
+    'save_room'             => 'save_room',
+    'delete_room'           => 'delete_room',
+    // Check-in / out / booking
+    'save_check-in'         => 'save_check_in',
+    'save_checkout'         => 'save_checkout',
+    'save_book'             => 'save_book',
+    // Guests
+    'save_guest'            => 'save_guest',
+    'delete_guest'          => 'delete_guest',
+    'search_guests'         => 'search_guests',
+    // Guest requests
+    'save_guest_request'    => 'save_guest_request',
+    // Housekeeping
+    'save_housekeeping_task' => 'save_housekeeping_task',
+    'update_task_status'    => 'update_task_status',
+    'update_room_hk_status' => 'update_room_hk_status',
+    // Billing
+    'add_invoice_item'      => 'add_invoice_item',
+    'delete_invoice_item'   => 'delete_invoice_item',
+    'update_invoice'        => 'update_invoice',
+    'save_payment'          => 'save_payment',
+    // Notifications
+    'get_notifications'     => 'get_notifications',
+    'mark_notification_read' => 'mark_notification_read',
+    // Dashboard & Reports
+    'get_dashboard_stats'   => 'get_dashboard_stats',
+    'get_reports'           => 'get_reports',
+];
+
+if (isset($routes[$action])) {
+    $out = $crud->{$routes[$action]}();
+} else {
+    $out = json_encode(['status' => 'error', 'message' => 'Unknown action']);
 }
 
-// ── Guests ───────────────────────────────────────────────────────────────────
-if ($action === 'save_guest') {
-    echo $crud->save_guest(); exit;
+// Discard any stray output (warnings, whitespace, BOM) captured in the output
+// buffers so the client receives the handler's JSON and nothing else.
+while (ob_get_level() > 0) {
+    ob_end_clean();
 }
-if ($action === 'delete_guest') {
-    echo $crud->delete_guest(); exit;
-}
-if ($action === 'search_guests') {
-    echo $crud->search_guests(); exit;
-}
-
-// ── Guest requests ───────────────────────────────────────────────────────────
-if ($action === 'save_guest_request') {
-    echo $crud->save_guest_request(); exit;
-}
-
-// ── Housekeeping ─────────────────────────────────────────────────────────────
-if ($action === 'save_housekeeping_task') {
-    echo $crud->save_housekeeping_task(); exit;
-}
-if ($action === 'update_task_status') {
-    echo $crud->update_task_status(); exit;
-}
-if ($action === 'update_room_hk_status') {
-    echo $crud->update_room_hk_status(); exit;
-}
-
-// ── Billing ──────────────────────────────────────────────────────────────────
-if ($action === 'add_invoice_item') {
-    echo $crud->add_invoice_item(); exit;
-}
-if ($action === 'delete_invoice_item') {
-    echo $crud->delete_invoice_item(); exit;
-}
-if ($action === 'update_invoice') {
-    echo $crud->update_invoice(); exit;
-}
-if ($action === 'save_payment') {
-    echo $crud->save_payment(); exit;
-}
-
-// ── Notifications ────────────────────────────────────────────────────────────
-if ($action === 'get_notifications') {
-    echo $crud->get_notifications(); exit;
-}
-if ($action === 'mark_notification_read') {
-    echo $crud->mark_notification_read(); exit;
-}
-
-// ── Dashboard & Reports ──────────────────────────────────────────────────────
-if ($action === 'get_dashboard_stats') {
-    echo $crud->get_dashboard_stats(); exit;
-}
-if ($action === 'get_reports') {
-    echo $crud->get_reports(); exit;
-}
-
-echo json_encode(['status' => 'error', 'message' => 'Unknown action']);
+echo $out;
+exit;

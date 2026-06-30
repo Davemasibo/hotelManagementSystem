@@ -232,8 +232,8 @@ a.custom-menu-list span.icon{
 				method:'POST',
 				data:{id:$(this).attr('data-id'),name:$(this).val(),type:$(this).attr('data-type'),folder_id:'<?php echo $folder_parent ?>'},
 				success:function(resp){
-					if(typeof resp != undefined){
-						resp = JSON.parse(resp);
+					if(resp){
+						if(typeof resp === 'string') resp = JSON.parse(resp);
 						if(resp.status== 1){
 								_this.siblings('large').find('b').html(resp.new_name);
 								end_load();

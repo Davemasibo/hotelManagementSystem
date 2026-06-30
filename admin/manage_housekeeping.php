@@ -93,7 +93,7 @@ $('#hk-form').submit(function(e) {
   start_load();
   $.post('ajax.php?action=save_housekeeping_task', $(this).serialize(), function(resp) {
     end_load();
-    var r = JSON.parse(resp);
+    var r = (typeof resp === 'string') ? JSON.parse(resp) : resp;
     if (r.status === 'ok') {
       alert_toast('Task saved', 'success');
       setTimeout(function() { $('#uni_modal').modal('hide'); location.reload(); }, 1200);
