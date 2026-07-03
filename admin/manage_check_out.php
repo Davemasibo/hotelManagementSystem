@@ -100,7 +100,12 @@ $gname  = $meta['guest_name'] ?: $meta['name'];
   </div>
   <?php endif; ?>
 
-  <?php if ($meta['status'] != 2): ?>
+  <?php if ($meta['status'] == 0): ?>
+  <div class="alert alert-info mb-0">
+    <i class="fa fa-info-circle mr-1"></i>This is a pending booking. Check the guest in from the
+    <strong>Check-In</strong> page when they arrive — an invoice is generated at check-in.
+  </div>
+  <?php elseif ($meta['status'] == 1): ?>
   <!-- Check-out Confirm -->
   <div class="card">
     <div class="card-body">
