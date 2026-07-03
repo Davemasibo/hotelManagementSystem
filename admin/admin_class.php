@@ -380,13 +380,28 @@ class Action {
 
     function delete_category() {
         $id = (int)($_POST['id'] ?? 0);
-        if ($id <= 0) return 0;
+        if ($id <= 0) return json_encode(['status' => 'error', 'message' => 'Invalid category']);
+
+        // Guard against orphaning rooms: a room pointing at a deleted category
+        // loses its price, which silently produces KES 0 invoices at check-in.
+        $chk = $this->db->prepare("SELECT COUNT(*) AS c FROM rooms WHERE category_id=?");
+        $chk->bind_param("i", $id);
+        $chk->execute();
+        $count = (int)$chk->get_result()->fetch_assoc()['c'];
+        $chk->close();
+        if ($count > 0) {
+            return json_encode([
+                'status'  => 'error',
+                'message' => "Cannot delete: {$count} room(s) still use this category. Reassign those rooms to another category first."
+            ]);
+        }
+
         $stmt = $this->db->prepare("DELETE FROM room_categories WHERE id=?");
         $stmt->bind_param("i", $id);
         $ok = $stmt->execute();
         $stmt->close();
-        if ($ok) { $this->log_action('delete', 'room_categories', $id, "Deleted category ID: $id"); return 1; }
-        return 0;
+        if ($ok) { $this->log_action('delete', 'room_categories', $id, "Deleted category ID: $id"); return json_encode(['status' => 'ok']); }
+        return json_encode(['status' => 'error', 'message' => 'Delete failed']);
     }
 
     // =====================================================
@@ -470,6 +485,24 @@ class Action {
             $rchk->execute();
             $rrow = $rchk->get_result()->fetch_assoc();
             $rchk->close();
+
+            // Source-of-truth guard: a room with an active (status=1) stay must be
+            // checked out before it can be checked in again. This catches cases
+            // where rooms.status has drifted out of sync with the `checked` table.
+            if (empty($id)) {
+                $act = $this->db->prepare("SELECT id FROM checked WHERE room_id=? AND status=1 LIMIT 1");
+                $act->bind_param("i", $rid);
+                $act->execute();
+                $active = $act->get_result()->fetch_assoc();
+                $act->close();
+                if ($active) {
+                    // Self-heal: make sure the room flag reflects the active stay.
+                    $this->db->query("UPDATE rooms SET status=1 WHERE id=" . (int)$rid);
+                    $this->db->commit();
+                    return json_encode(['status' => 'error', 'message' => 'Room is already checked in — check it out first.']);
+                }
+            }
+
             if (!$rrow || ($rrow['status'] == 1 && empty($id))) {
                 $this->db->rollback();
                 return json_encode(['status' => 'error', 'message' => 'Room is no longer available']);

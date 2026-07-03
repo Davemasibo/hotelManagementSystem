@@ -166,11 +166,16 @@ function delete_cat($id) {
     method: 'POST',
     data: {id: $id},
     success: function(resp) {
-      if (resp == 1) {
+      // delete_category now returns JSON: {status:'ok'} or {status:'error',message}
+      var r = (typeof resp === 'object') ? resp : (function(){ try { return JSON.parse(resp); } catch(e){ return {status: resp == 1 ? 'ok' : 'error'}; } })();
+      if (r.status === 'ok') {
         alert_toast("Data successfully deleted", 'success');
         setTimeout(function() { location.reload(); }, 1500);
+      } else {
+        alert_toast(r.message || 'Could not delete category', 'danger');
       }
     }
-  });
+  }).fail(function(){ alert_toast('Request failed — please retry','danger'); })
+    .always(function(){ end_load(); });
 }
 </script>

@@ -181,42 +181,62 @@ $status_colors=['draft'=>'secondary','issued'=>'warning','partial'=>'info','paid
 </div>
 
 <script>
+// Safely parse a response that may already be an object (jQuery auto-parses
+// application/json) or still be a JSON string.
+function parseResp(resp) {
+  if (resp && typeof resp === 'object') return resp;
+  try { return JSON.parse(resp); } catch (e) { return {status: 'error', message: 'Unexpected response'}; }
+}
+
 $('#inv-settings-form').submit(function(e) {
   e.preventDefault();
   start_load();
   $.post('ajax.php?action=update_invoice', $(this).serialize(), function(resp) {
-    end_load();
-    var r = (typeof resp === 'string') ? JSON.parse(resp) : resp;
-    if (r.status === 'ok') { updateTotals(r.totals); alert_toast('Invoice updated','success'); }
-  });
+    var r = parseResp(resp);
+    if (r.status === 'ok') {
+      updateTotals(r.totals);
+      alert_toast('Invoice updated','success');
+      // Close the invoice modal after saving so the user isn't left with a
+      // stuck-open panel.
+      setTimeout(function(){ $('#uni_modal').modal('hide'); }, 900);
+    } else { alert_toast(r.message || 'Update failed','danger'); }
+  }).fail(function(){ alert_toast('Request failed — please retry','danger'); })
+    .always(function(){ end_load(); });   // ALWAYS clear the loader, even on error
 });
 
 $('#add-item-form').submit(function(e) {
   e.preventDefault();
+  // Validate before sending so an empty row gives a clear message instead of a
+  // confusing "Missing fields" from the server (and never leaves a spinner up).
+  var $f = $(this);
+  var desc  = ($f.find('[name="description"]').val() || '').trim();
+  var price = ($f.find('[name="unit_price"]').val() || '').trim();
+  if (!desc)  { alert_toast('Enter a description for the item', 'warning'); $f.find('[name="description"]').focus(); return; }
+  if (price === '' || isNaN(parseFloat(price))) { alert_toast('Enter a unit price', 'warning'); $f.find('[name="unit_price"]').focus(); return; }
   start_load();
-  $.post('ajax.php?action=add_invoice_item', $(this).serialize(), function(resp) {
-    end_load();
-    var r = (typeof resp === 'string') ? JSON.parse(resp) : resp;
+  $.post('ajax.php?action=add_invoice_item', $f.serialize(), function(resp) {
+    var r = parseResp(resp);
     if (r.status === 'ok') {
       alert_toast('Item added','success');
       setTimeout(function(){ location.reload(); }, 800);
     } else {
-      alert_toast(r.message || 'Error','danger');
+      alert_toast(r.message || 'Could not add item','danger');
     }
-  });
+  }).fail(function(){ alert_toast('Request failed — please retry','danger'); })
+    .always(function(){ end_load(); });
 });
 
 function deleteItem(itemId, invoiceId) {
   if (!confirm('Remove this line item?')) return;
   start_load();
   $.post('ajax.php?action=delete_invoice_item', {id: itemId, invoice_id: invoiceId}, function(resp) {
-    end_load();
-    var r = (typeof resp === 'string') ? JSON.parse(resp) : resp;
+    var r = parseResp(resp);
     if (r.status === 'ok') {
       $('#item-row-'+itemId).remove();
       updateTotals(r.totals);
-    }
-  });
+    } else { alert_toast(r.message || 'Could not remove item','danger'); }
+  }).fail(function(){ alert_toast('Request failed — please retry','danger'); })
+    .always(function(){ end_load(); });
 }
 
 function updateTotals(t) {

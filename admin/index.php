@@ -41,6 +41,7 @@
       <div class="modal-content">
         <div class="modal-header">
         <h5 class="modal-title">Confirmation</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
       </div>
       <div class="modal-body">
         <div id="delete_content"></div>
@@ -57,6 +58,7 @@
       <div class="modal-content">
         <div class="modal-header">
         <h5 class="modal-title"></h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
       </div>
       <div class="modal-body">
       </div>
@@ -70,10 +72,15 @@
 </body>
 <script>
 	 window.start_load = function(){
-    $('body').prepend('<di id="preloader2"></di>')
+    // Guard against stacking: only ever have ONE overlay. Previously this
+    // prepended a new element on every call, so repeated/failed actions piled
+    // up overlays that end_load() couldn't fully clear -> "infinite loading".
+    if ($('#preloader2').length) return;
+    $('body').prepend('<div id="preloader2"></div>')
   }
   window.end_load = function(){
-    $('#preloader2').fadeOut('fast', function() {
+    // Remove ALL matching overlays (defensively clears any that stacked before).
+    $('[id="preloader2"]').stop(true, true).fadeOut('fast', function() {
         $(this).remove();
       })
   }
@@ -83,14 +90,18 @@
     $.ajax({
         url:$url,
         error:err=>{
-            console.log()
+            end_load()
             alert("An error occured")
         },
         success:function(resp){
             if(resp){
                 $('#uni_modal .modal-title').html($title)
                 $('#uni_modal .modal-body').html(resp)
-                $('#uni_modal').modal('show')
+                // Explicit backdrop so a dimmed overlay always appears behind the
+                // modal and clicking it (or the × / Esc) dismisses the modal.
+                $('#uni_modal').modal({backdrop: true, keyboard: true, show: true})
+                end_load()
+            } else {
                 end_load()
             }
         }
@@ -99,8 +110,18 @@
 window._conf = function($msg='',$func='',$params = []){
      $('#confirm_modal #confirm').attr('onclick',$func+"("+$params.join(',')+")")
      $('#confirm_modal .modal-body').html($msg)
-     $('#confirm_modal').modal('show')
+     $('#confirm_modal').modal({backdrop: true, keyboard: true, show: true})
   }
+
+  // Safety net: whenever a modal closes, if no modal remains open, strip any
+  // leftover backdrop/scroll-lock so the page can never get stuck behind a
+  // greyed-out overlay (a classic Bootstrap stacked-modal side effect).
+  $(document).on('hidden.bs.modal', '.modal', function(){
+     if ($('.modal.show').length === 0) {
+        $('.modal-backdrop').remove();
+        $('body').removeClass('modal-open').css('padding-right','');
+     }
+  });
    window.alert_toast= function($msg = 'TEST',$bg = 'success'){
       $('#alert_toast').removeClass('bg-success')
       $('#alert_toast').removeClass('bg-danger')

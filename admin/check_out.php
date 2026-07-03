@@ -32,7 +32,9 @@ while ($row = $room->fetch_assoc()) {
         <tbody>
           <?php
           $i = 1;
-          $checked = $conn->query("SELECT * FROM checked WHERE status != 0 ORDER BY status DESC, id ASC");
+          // Checked-IN (status=1) rows first so the actionable "Check Out" rows
+          // are on the first page; newest first within each group.
+          $checked = $conn->query("SELECT * FROM checked WHERE status != 0 ORDER BY status ASC, id DESC");
           while ($row = $checked->fetch_assoc()):
           ?>
           <tr>
@@ -46,9 +48,15 @@ while ($row = $room->fetch_assoc()) {
               <td class="text-center"><span class="badge badge-success">Checked-Out</span></td>
             <?php endif; ?>
             <td class="text-center">
-              <button class="btn btn-sm btn-primary check_out" type="button" data-id="<?php echo $row['id']; ?>">
+              <?php if ($row['status'] == 1): ?>
+              <button class="btn btn-sm btn-danger check_out" type="button" data-id="<?php echo $row['id']; ?>">
+                <i class="fa fa-sign-out-alt mr-1"></i>Check Out
+              </button>
+              <?php else: ?>
+              <button class="btn btn-sm btn-outline-secondary check_out" type="button" data-id="<?php echo $row['id']; ?>">
                 <i class="fa fa-eye mr-1"></i>View
               </button>
+              <?php endif; ?>
             </td>
           </tr>
           <?php endwhile; ?>
