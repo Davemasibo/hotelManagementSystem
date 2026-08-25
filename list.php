@@ -1,6 +1,15 @@
 <?php
-$date_in = isset($_POST['date_in']) ? $_POST['date_in'] : date('Y-m-d');
-$date_out = isset($_POST['date_out']) ? $_POST['date_out'] : date('Y-m-d',strtotime(date('Y-m-d').' + 3 days'));
+$today = date('Y-m-d');
+
+// Normalise the submitted dates, then clamp them: availability is never searched
+// in the past, and check-out must fall after check-in. The datepicker greys out
+// past dates, but a typed-in value still lands here.
+$date_in  = !empty($_POST['date_in'])  ? date('Y-m-d', strtotime($_POST['date_in']))  : $today;
+$date_out = !empty($_POST['date_out']) ? date('Y-m-d', strtotime($_POST['date_out'])) : date('Y-m-d', strtotime($today . ' + 3 days'));
+
+$backdated = ($date_in < $today);
+if ($backdated) $date_in = $today;
+if ($date_out <= $date_in) $date_out = date('Y-m-d', strtotime($date_in . ' + 1 day'));
 ?>
 
 	 <!-- Masthead-->
@@ -38,9 +47,14 @@ $date_out = isset($_POST['date_out']) ? $_POST['date_out'] : date('Y-m-d',strtot
 			        						</div>
 
 			        					</div>
+			        					<?php if ($backdated): ?>
+			        					<div class="alert alert-warning mt-3 mb-0 py-2">
+			        						<small>Bookings cannot start in the past — the check-in date was moved to today.</small>
+			        					</div>
+			        					<?php endif; ?>
 			        				</form>
 							</div>
-						</div>	
+						</div>
 
 						<hr>	
 						

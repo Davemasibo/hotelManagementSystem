@@ -1,6 +1,11 @@
  <script>
  	$('.datepicker').datepicker({
- 		format:"yyyy-mm-dd"
+ 		format:"yyyy-mm-dd",
+ 		// Availability can only be searched from today onward — past dates are
+ 		// greyed out, and list.php clamps anything typed in by hand.
+ 		startDate: new Date(),
+ 		todayHighlight: true,
+ 		autoclose: true
  	})
  	 window.start_load = function(){
     $('body').prepend('<di id="preloader2"></di>')

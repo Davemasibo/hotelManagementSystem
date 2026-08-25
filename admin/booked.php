@@ -5,6 +5,14 @@ $cat_arr = [];
 $cat = $conn->query("SELECT id, name FROM room_categories");
 while ($row = $cat->fetch_assoc()) { $cat_arr[$row['id']] = $row['name']; }
 
+// `checked.id_number` arrives with migration_v5 — select it only when present so
+// the page still renders on a database that has not been migrated yet.
+$has_id_col = (bool)$conn->query(
+    "SELECT 1 FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'checked' AND COLUMN_NAME = 'id_number' LIMIT 1"
+)->num_rows;
+$id_col_sql = $has_id_col ? 'c.id_number,' : "'' AS id_number,";
+
 // Summary: bookings + paid/unpaid across all reservations that have an invoice
 $booked_count = (int)$conn->query("SELECT COUNT(*) c FROM checked WHERE status=0")->fetch_assoc()['c'];
 $paid_count   = (int)$conn->query("SELECT COUNT(*) c FROM invoices WHERE status='paid'")->fetch_assoc()['c'];
@@ -97,6 +105,7 @@ $unpaid       = $conn->query("SELECT COUNT(*) c, COALESCE(SUM(balance),0) b FROM
             <th>Room / Category</th>
             <th>Reference</th>
             <th>Check-In</th>
+            <th>Check-Out</th>
             <th class="text-center">Status</th>
             <th class="text-center">Payment</th>
             <th class="text-center">Action</th>
@@ -106,7 +115,8 @@ $unpaid       = $conn->query("SELECT COUNT(*) c, COALESCE(SUM(balance),0) b FROM
           <?php
           $i = 1;
           $rows = $conn->query(
-              "SELECT c.id, c.ref_no, c.name AS guest_raw, c.status AS bstatus, c.date_in, c.booked_cid,
+              "SELECT c.id, c.ref_no, c.name AS guest_raw, c.status AS bstatus, c.date_in, c.date_out,
+                      c.booked_cid, c.contact_no, $id_col_sql
                       g.full_name AS guest_name, g.is_vip,
                       r.room, rc.name AS room_cat,
                       inv.id AS invoice_id, inv.status AS inv_status, inv.balance
@@ -146,10 +156,15 @@ $unpaid       = $conn->query("SELECT COUNT(*) c, COALESCE(SUM(balance),0) b FROM
             <td>
               <?php if ($row['is_vip']): ?><span class="badge" style="background:#ffc107;color:#000">VIP</span> <?php endif; ?>
               <?php echo htmlspecialchars($gname); ?>
+              <div class="small text-muted">
+                <?php echo htmlspecialchars($row['contact_no'] ?: '—'); ?>
+                &bull; ID: <?php echo htmlspecialchars($row['id_number'] ?: '—'); ?>
+              </div>
             </td>
             <td><?php echo htmlspecialchars($room_lbl); ?></td>
             <td><code><?php echo htmlspecialchars(trim($row['ref_no'])); ?></code></td>
-            <td><small><?php echo $row['date_in'] ? date('M d, Y', strtotime($row['date_in'])) : '—'; ?></small></td>
+            <td><small><?php echo $row['date_in'] ? date('M d, Y', strtotime($row['date_in'])) . '<br>' . date('H:i', strtotime($row['date_in'])) : '—'; ?></small></td>
+            <td><small><?php echo $row['date_out'] ? date('M d, Y', strtotime($row['date_out'])) . '<br>' . date('H:i', strtotime($row['date_out'])) : '—'; ?></small></td>
             <td class="text-center">
               <span class="badge badge-<?php echo $bs_cls; ?>"><?php echo $bs_lbl; ?></span>
               <span class="d-none"><?php echo $bs_tok; ?></span>
@@ -185,11 +200,12 @@ $unpaid       = $conn->query("SELECT COUNT(*) c, COALESCE(SUM(balance),0) b FROM
 <script>
   var bookedTable = $('#booked-table').DataTable({ order: [] });
 
+  // Column indices: 0 #, 1 Guest, 2 Room, 3 Ref, 4 Check-In, 5 Check-Out, 6 Status, 7 Payment, 8 Action
   $('#f-status').on('change', function() {
-    bookedTable.column(5).search(this.value).draw();
+    bookedTable.column(6).search(this.value).draw();
   });
   $('#f-pay').on('change', function() {
-    bookedTable.column(6).search(this.value).draw();
+    bookedTable.column(7).search(this.value).draw();
   });
 
   $('#booked-table').on('click', '.view_res', function() {

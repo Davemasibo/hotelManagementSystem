@@ -25,6 +25,63 @@ class Action {
         return htmlspecialchars(strip_tags(trim((string)$str)), ENT_QUOTES, 'UTF-8');
     }
 
+    /**
+     * Whether a column exists, so the app keeps working on a database where the
+     * newest migration has not been imported yet. Cached for the request.
+     */
+    private function has_column($table, $column) {
+        static $cache = [];
+        $key = "$table.$column";
+        if (!array_key_exists($key, $cache)) {
+            $stmt = $this->db->prepare(
+                "SELECT 1 FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1"
+            );
+            $stmt->bind_param("ss", $table, $column);
+            $stmt->execute();
+            $cache[$key] = $stmt->get_result()->num_rows > 0;
+            $stmt->close();
+        }
+        return $cache[$key];
+    }
+
+    /**
+     * Shared validation for booking / check-in submissions. Returns an error
+     * string, or null when the reservation details are acceptable.
+     *
+     * Phone and ID are mandatory, and a stay may not start in the past — the
+     * browser is told the same thing via `required` and `min`, but a form can
+     * always be bypassed, so the rule is enforced here as well.
+     */
+    private function validate_reservation($name, $contact, $id_number, $date_in, $allow_past = false) {
+        if ($name === '')      return 'Guest name is required';
+        if ($contact === '')   return 'Phone number is required';
+        if ($id_number === '') return 'ID / passport number is required';
+
+        // Strip formatting (spaces, dashes, brackets, leading +) before counting digits.
+        $digits = preg_replace('/\D/', '', $contact);
+        if (strlen($digits) < 7) return 'Enter a valid phone number (at least 7 digits)';
+
+        if (!$allow_past) {
+            $in = strtotime($date_in);
+            if ($in === false) return 'Enter a valid check-in date';
+            if (date('Y-m-d', $in) < date('Y-m-d')) {
+                return 'Check-in date cannot be in the past';
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Build the check-out datetime: check-in date + N nights, at the hotel's
+     * check-out time (defaults to 11:00 when the form does not supply one).
+     */
+    private function build_date_out($datetime_in, $days, $date_out_time) {
+        $date_out_time = preg_match('/^\d{2}:\d{2}$/', $date_out_time) ? $date_out_time : '11:00';
+        $out_date = date('Y-m-d', strtotime($datetime_in . " +{$days} days"));
+        return $out_date . ' ' . $date_out_time;
+    }
+
     private function log_action($action, $module, $record_id = null, $description = '') {
         $user_id   = $_SESSION['login_id']   ?? null;
         $user_name = $_SESSION['login_name'] ?? 'System';
@@ -111,9 +168,48 @@ class Action {
 
         $price_per_night = (float)($room['price'] ?? 0);
         $room_charge     = round($price_per_night * $nights, 2);
-        $invoice_no      = $this->generate_invoice_no();
-        $user_id         = $_SESSION['login_id'] ?? null;
-        $due_date        = date('Y-m-d', strtotime('+7 days'));
+        $desc            = ($room['room'] ?? 'Room') . ' - ' . ($room['cat_name'] ?? '') . " x {$nights} night(s)";
+
+        // Editing a stay re-runs check-in. Reuse the invoice already raised for
+        // this reservation — refreshing its room charge for the new dates —
+        // instead of issuing a second invoice for the same guest.
+        $find = $this->db->prepare("SELECT id FROM invoices WHERE checked_id=? ORDER BY id LIMIT 1");
+        $find->bind_param("i", $checked_id);
+        $find->execute();
+        $existing = $find->get_result()->fetch_assoc();
+        $find->close();
+
+        if ($existing) {
+            $invoice_id = (int)$existing['id'];
+            $upd = $this->db->prepare(
+                "UPDATE invoice_items SET description=?, quantity=?, unit_price=?, amount=?
+                 WHERE invoice_id=? AND item_type='room_charge'"
+            );
+            $qty = (float)$nights;
+            $upd->bind_param("sdddi", $desc, $qty, $price_per_night, $room_charge, $invoice_id);
+            $upd->execute();
+            $touched = $upd->affected_rows;
+            $upd->close();
+
+            // No room-charge line yet (hand-built invoice) — add one.
+            if ($touched === 0) {
+                $item_type = 'room_charge';
+                $ins = $this->db->prepare(
+                    "INSERT INTO invoice_items (invoice_id,description,item_type,quantity,unit_price,amount)
+                     VALUES (?,?,?,?,?,?)"
+                );
+                $ins->bind_param("issddd", $invoice_id, $desc, $item_type, $qty, $price_per_night, $room_charge);
+                $ins->execute();
+                $ins->close();
+            }
+
+            $this->recalculate_invoice($invoice_id);
+            return $invoice_id;
+        }
+
+        $invoice_no = $this->generate_invoice_no();
+        $user_id    = $_SESSION['login_id'] ?? null;
+        $due_date   = date('Y-m-d', strtotime('+7 days'));
 
         $stmt = $this->db->prepare(
             "INSERT INTO invoices (invoice_no,checked_id,guest_id,subtotal,total,balance,status,due_date,created_by,issued_at)
@@ -125,7 +221,6 @@ class Action {
         $invoice_id = $this->db->insert_id;
         $stmt->close();
 
-        $desc       = ($room['room'] ?? 'Room') . ' - ' . ($room['cat_name'] ?? '') . " x {$nights} night(s)";
         $item_type  = 'room_charge';
         $qty        = (float)$nights;
         $unit_price = $price_per_night;
@@ -454,18 +549,25 @@ class Action {
     // =====================================================
 
     function save_check_in() {
-        $id           = (int)($_POST['id']       ?? 0);
-        $rid          = (int)($_POST['rid']       ?? 0);
-        $guest_id     = (int)($_POST['guest_id']  ?? 0) ?: null;
-        $name         = $this->clean($_POST['name']         ?? '');
-        $contact      = $this->clean($_POST['contact']      ?? '');
-        $date_in      = $this->clean($_POST['date_in']      ?? date('Y-m-d'));
-        $date_in_time = $this->clean($_POST['date_in_time'] ?? '12:00');
-        $days         = max(1, (int)($_POST['days'] ?? 1));
-        $requests     = $this->clean($_POST['special_requests'] ?? '');
+        $id            = (int)($_POST['id']       ?? 0);
+        $rid           = (int)($_POST['rid']       ?? 0);
+        $guest_id      = (int)($_POST['guest_id']  ?? 0) ?: null;
+        $name          = $this->clean($_POST['name']         ?? '');
+        $contact       = $this->clean($_POST['contact']      ?? '');
+        $id_number     = $this->clean($_POST['id_number']    ?? '');
+        $date_in       = $this->clean($_POST['date_in']      ?? date('Y-m-d'));
+        $date_in_time  = $this->clean($_POST['date_in_time'] ?? '12:00');
+        $date_out_time = $this->clean($_POST['date_out_time'] ?? '11:00');
+        $days          = max(1, (int)($_POST['days'] ?? 1));
+        $requests      = $this->clean($_POST['special_requests'] ?? '');
+
+        // Editing an existing stay may legitimately keep a past check-in date;
+        // only a brand-new check-in is held to "today or later".
+        $err = $this->validate_reservation($name, $contact, $id_number, $date_in, $id > 0);
+        if ($err) return json_encode(['status' => 'error', 'message' => $err]);
 
         $datetime_in  = $date_in . ' ' . $date_in_time;
-        $datetime_out = date('Y-m-d H:i', strtotime($datetime_in . " +{$days} days"));
+        $datetime_out = $this->build_date_out($datetime_in, $days, $date_out_time);
 
         // Generate unique ref_no
         do {
@@ -508,24 +610,44 @@ class Action {
                 return json_encode(['status' => 'error', 'message' => 'Room is no longer available']);
             }
 
+            $has_id_col = $this->has_column('checked', 'id_number');
+
             if (empty($id)) {
-                $stmt = $this->db->prepare(
-                    "INSERT INTO checked (guest_id,ref_no,room_id,name,contact_no,special_requests,date_in,date_out,status)
-                     VALUES (?,?,?,?,?,?,?,?,1)"
-                );
-                // guest_id=i, ref=s, rid=i, name=s, contact=s, requests=s, date_in=s, date_out=s
-                $stmt->bind_param("isisssss", $guest_id, $ref, $rid, $name, $contact, $requests, $datetime_in, $datetime_out);
+                if ($has_id_col) {
+                    $stmt = $this->db->prepare(
+                        "INSERT INTO checked (guest_id,ref_no,room_id,name,contact_no,id_number,special_requests,date_in,date_out,status)
+                         VALUES (?,?,?,?,?,?,?,?,?,1)"
+                    );
+                    // guest_id=i, ref=s, rid=i, name=s, contact=s, id_number=s, requests=s, date_in=s, date_out=s
+                    $stmt->bind_param("isissssss", $guest_id, $ref, $rid, $name, $contact, $id_number, $requests, $datetime_in, $datetime_out);
+                } else {
+                    $stmt = $this->db->prepare(
+                        "INSERT INTO checked (guest_id,ref_no,room_id,name,contact_no,special_requests,date_in,date_out,status)
+                         VALUES (?,?,?,?,?,?,?,?,1)"
+                    );
+                    // guest_id=i, ref=s, rid=i, name=s, contact=s, requests=s, date_in=s, date_out=s
+                    $stmt->bind_param("isisssss", $guest_id, $ref, $rid, $name, $contact, $requests, $datetime_in, $datetime_out);
+                }
                 $stmt->execute();
                 $cid = $this->db->insert_id;
                 $stmt->close();
             } else {
-                $cid  = $id;
-                $stmt = $this->db->prepare(
-                    "UPDATE checked SET guest_id=?,room_id=?,name=?,contact_no=?,special_requests=?,
-                     date_in=?,date_out=?,ref_no=?,status=1 WHERE id=?"
-                );
-                // guest_id=i, room_id=i, name=s, contact=s, requests=s, date_in=s, date_out=s, ref=s, id=i
-                $stmt->bind_param("iissssssi", $guest_id, $rid, $name, $contact, $requests, $datetime_in, $datetime_out, $ref, $cid);
+                $cid = $id;
+                if ($has_id_col) {
+                    $stmt = $this->db->prepare(
+                        "UPDATE checked SET guest_id=?,room_id=?,name=?,contact_no=?,id_number=?,special_requests=?,
+                         date_in=?,date_out=?,ref_no=?,status=1 WHERE id=?"
+                    );
+                    // guest_id=i, room_id=i, name=s, contact=s, id_number=s, requests=s, date_in=s, date_out=s, ref=s, id=i
+                    $stmt->bind_param("iisssssssi", $guest_id, $rid, $name, $contact, $id_number, $requests, $datetime_in, $datetime_out, $ref, $cid);
+                } else {
+                    $stmt = $this->db->prepare(
+                        "UPDATE checked SET guest_id=?,room_id=?,name=?,contact_no=?,special_requests=?,
+                         date_in=?,date_out=?,ref_no=?,status=1 WHERE id=?"
+                    );
+                    // guest_id=i, room_id=i, name=s, contact=s, requests=s, date_in=s, date_out=s, ref=s, id=i
+                    $stmt->bind_param("iissssssi", $guest_id, $rid, $name, $contact, $requests, $datetime_in, $datetime_out, $ref, $cid);
+                }
                 $stmt->execute();
                 $stmt->close();
             }
@@ -625,17 +747,22 @@ class Action {
     }
 
     function save_book() {
-        $cid          = (int)($_POST['cid']          ?? 0);
-        $guest_id     = (int)($_POST['guest_id']      ?? 0) ?: null;
-        $name         = $this->clean($_POST['name']         ?? '');
-        $contact      = $this->clean($_POST['contact']      ?? '');
-        $date_in      = $this->clean($_POST['date_in']      ?? date('Y-m-d'));
-        $date_in_time = $this->clean($_POST['date_in_time'] ?? '14:00');
-        $days         = max(1, (int)($_POST['days'] ?? 1));
-        $requests     = $this->clean($_POST['special_requests'] ?? '');
+        $cid           = (int)($_POST['cid']          ?? 0);
+        $guest_id      = (int)($_POST['guest_id']      ?? 0) ?: null;
+        $name          = $this->clean($_POST['name']         ?? '');
+        $contact       = $this->clean($_POST['contact']      ?? '');
+        $id_number     = $this->clean($_POST['id_number']    ?? '');
+        $date_in       = $this->clean($_POST['date_in']      ?? date('Y-m-d'));
+        $date_in_time  = $this->clean($_POST['date_in_time'] ?? '14:00');
+        $date_out_time = $this->clean($_POST['date_out_time'] ?? '11:00');
+        $days          = max(1, (int)($_POST['days'] ?? 1));
+        $requests      = $this->clean($_POST['special_requests'] ?? '');
+
+        $err = $this->validate_reservation($name, $contact, $id_number, $date_in);
+        if ($err) return json_encode(['status' => 'error', 'message' => $err]);
 
         $datetime_in  = $date_in . ' ' . $date_in_time;
-        $datetime_out = date('Y-m-d H:i', strtotime($datetime_in . " +{$days} days"));
+        $datetime_out = $this->build_date_out($datetime_in, $days, $date_out_time);
 
         do {
             $ref = sprintf('%010d', mt_rand(1, 9999999999));
@@ -646,11 +773,19 @@ class Action {
             $chk->close();
         } while ($found > 0);
 
-        $stmt = $this->db->prepare(
-            "INSERT INTO checked (guest_id,booked_cid,ref_no,name,contact_no,special_requests,date_in,date_out,status)
-             VALUES (?,?,?,?,?,?,?,?,0)"
-        );
-        $stmt->bind_param("iissssss", $guest_id, $cid, $ref, $name, $contact, $requests, $datetime_in, $datetime_out);
+        if ($this->has_column('checked', 'id_number')) {
+            $stmt = $this->db->prepare(
+                "INSERT INTO checked (guest_id,booked_cid,ref_no,name,contact_no,id_number,special_requests,date_in,date_out,status)
+                 VALUES (?,?,?,?,?,?,?,?,?,0)"
+            );
+            $stmt->bind_param("iisssssss", $guest_id, $cid, $ref, $name, $contact, $id_number, $requests, $datetime_in, $datetime_out);
+        } else {
+            $stmt = $this->db->prepare(
+                "INSERT INTO checked (guest_id,booked_cid,ref_no,name,contact_no,special_requests,date_in,date_out,status)
+                 VALUES (?,?,?,?,?,?,?,?,0)"
+            );
+            $stmt->bind_param("iissssss", $guest_id, $cid, $ref, $name, $contact, $requests, $datetime_in, $datetime_out);
+        }
         $stmt->execute();
         $new_id = $this->db->insert_id;
         $stmt->close();
@@ -685,6 +820,11 @@ class Action {
         $dob           = !empty($date_of_birth) ? $date_of_birth : null;
 
         if (empty($full_name)) return json_encode(['status' => 'error', 'message' => 'Name required']);
+        if (empty($phone))     return json_encode(['status' => 'error', 'message' => 'Phone number is required']);
+        if (empty($id_number)) return json_encode(['status' => 'error', 'message' => 'ID / passport number is required']);
+        if (strlen(preg_replace('/\D/', '', $phone)) < 7) {
+            return json_encode(['status' => 'error', 'message' => 'Enter a valid phone number (at least 7 digits)']);
+        }
 
         if (empty($id)) {
             $stmt = $this->db->prepare(
@@ -733,11 +873,11 @@ class Action {
     function search_guests() {
         $q = '%' . $this->clean($_GET['q'] ?? '') . '%';
         $stmt = $this->db->prepare(
-            "SELECT id, full_name, email, phone, is_vip FROM guests
-             WHERE full_name LIKE ? OR email LIKE ? OR phone LIKE ?
+            "SELECT id, full_name, email, phone, id_number, is_vip FROM guests
+             WHERE full_name LIKE ? OR email LIKE ? OR phone LIKE ? OR id_number LIKE ?
              ORDER BY full_name LIMIT 20"
         );
-        $stmt->bind_param("sss", $q, $q, $q);
+        $stmt->bind_param("ssss", $q, $q, $q, $q);
         $stmt->execute();
         $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmt->close();

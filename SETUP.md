@@ -120,7 +120,8 @@ matters** — migrations `ALTER` tables created by earlier files.
 | 2 | `database/migration_v2.sql` | 9 modules: `guests`, `guest_preferences`, `guest_requests`, `housekeeping_tasks`, `invoices`, `invoice_items`, `payments`, `notifications`, `audit_logs` + ALTERs |
 | 3 | `database/migration_v3.sql` | Auth fields on `users` (email, phone, status, reset tokens) for signup/forgot‑password |
 | 4 | `database/migration_v4.sql` | Extra `system_settings` columns (currency, tax, invoice prefix, check‑in/out times) + user columns |
-| 5 | `database/demo_seed.sql`    | **Optional** — a ready **demo staff login** (`demo` / `demo123`) + a pending signup for the approval queue, plus sample guests, bookings, invoices, payments, housekeeping & notifications so the dashboard/reports look populated for a demo |
+| 5 | `database/migration_v5.sql` | Guest ID/passport number on `checked` (`id_number`) — required for the mandatory phone + ID capture on booking/check-in |
+| 6 | `database/demo_seed.sql`    | **Optional** — a ready **demo staff login** (`demo` / `demo123`) + a pending signup for the approval queue, plus sample guests, bookings, invoices, payments, housekeeping & notifications so the dashboard/reports look populated for a demo |
 
 ### Command line (Windows / XAMPP)
 
@@ -130,6 +131,7 @@ Get-Content database\hotel_db.sql      -Raw | & $mysql -u root hotel_db
 Get-Content database\migration_v2.sql  -Raw | & $mysql -u root hotel_db
 Get-Content database\migration_v3.sql  -Raw | & $mysql -u root hotel_db
 Get-Content database\migration_v4.sql  -Raw | & $mysql -u root hotel_db
+Get-Content database\migration_v5.sql  -Raw | & $mysql -u root hotel_db
 Get-Content database\demo_seed.sql     -Raw | & $mysql -u root hotel_db   # optional demo data
 ```
 
@@ -140,6 +142,7 @@ mysql -u root hotel_db < database/hotel_db.sql
 mysql -u root hotel_db < database/migration_v2.sql
 mysql -u root hotel_db < database/migration_v3.sql
 mysql -u root hotel_db < database/migration_v4.sql
+mysql -u root hotel_db < database/migration_v5.sql
 mysql -u root hotel_db < database/demo_seed.sql        # optional demo data
 ```
 
@@ -174,7 +177,7 @@ file **in the order above (1 → 5)**.
    > On first login the plaintext seed password is transparently upgraded to a
    > bcrypt hash — the credentials stay the same.
 
-   If you imported the optional `demo_seed.sql` (step 4 · file 5), a non-admin
+   If you imported the optional `demo_seed.sql` (step 4 · file 6), a non-admin
    **demo staff** account is also ready to use:
 
    ```

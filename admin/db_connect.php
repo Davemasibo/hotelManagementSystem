@@ -27,6 +27,7 @@ try {
         <li>Select <code>hotel_db</code> &rarr; <strong>Import</strong> tab</li>
         <li>Import <code>C:\xampp\htdocs\hotel\database\hotel_db.sql</code></li>
         <li>Import <code>C:\xampp\htdocs\hotel\database\migration_v2.sql</code></li>
+        <li>Import <code>migration_v3.sql</code>, <code>migration_v4.sql</code> and <code>migration_v5.sql</code> from the same folder</li>
         <li><a href="">Refresh this page</a></li>
       </ol>
       <p><strong>Default login:</strong> username <code>admin</code> &nbsp; password <code>admin123</code></p>

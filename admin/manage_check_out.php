@@ -5,7 +5,7 @@ if ($id <= 0) { echo '<div class="alert alert-danger">Invalid record.</div>'; ex
 
 $stmt = $conn->prepare(
     "SELECT c.*, r.room, r.id AS room_id, rc.name AS category, rc.price,
-            g.full_name AS guest_name, g.email, g.phone, g.is_vip, g.vip_note,
+            g.full_name AS guest_name, g.email, g.phone, g.is_vip, g.vip_note, g.id_number AS guest_id_number,
             i.id AS invoice_id, i.invoice_no, i.total, i.amount_paid, i.balance, i.status AS inv_status
      FROM checked c
      LEFT JOIN rooms r ON c.room_id = r.id
@@ -23,6 +23,8 @@ if (!$meta) { echo '<div class="alert alert-warning">Record not found.</div>'; e
 
 $nights = max(1,(int)round(abs(strtotime($meta['date_out'])-strtotime($meta['date_in']))/86400));
 $gname  = $meta['guest_name'] ?: $meta['name'];
+// Reservation ID number, falling back to the linked guest profile.
+$gid_no = ($meta['id_number'] ?? '') ?: (($meta['guest_id_number'] ?? '') ?: '—');
 ?>
 <style>
 #uni_modal .modal-footer { display:none; }
@@ -37,7 +39,8 @@ $gname  = $meta['guest_name'] ?: $meta['name'];
         <strong><?php echo htmlspecialchars($gname); ?></strong>
         <?php if ($meta['is_vip']): ?><span class="badge ml-1" style="background:#ffc107;color:#000">VIP</span><?php endif; ?>
         <?php if ($meta['vip_note']): ?><div class="small text-warning mt-1"><?php echo htmlspecialchars($meta['vip_note']); ?></div><?php endif; ?>
-        <div class="text-muted small mt-1"><?php echo htmlspecialchars($meta['contact_no']??''); ?></div>
+        <div class="text-muted small mt-1"><i class="fa fa-phone mr-1"></i><?php echo htmlspecialchars($meta['contact_no'] ?: '—'); ?></div>
+        <div class="text-muted small"><i class="fa fa-id-card mr-1"></i>ID: <?php echo htmlspecialchars($gid_no); ?></div>
       </div>
       <div class="col-md-3">
         <div class="text-muted small">Room</div>
@@ -48,13 +51,16 @@ $gname  = $meta['guest_name'] ?: $meta['name'];
       <div class="col-md-3">
         <div class="text-muted small">Stay Duration</div>
         <strong><?php echo $nights; ?> night<?php echo $nights>1?'s':''; ?></strong>
-        <div class="small text-muted"><?php echo date('M d',strtotime($meta['date_in'])); ?> → <?php echo date('M d, Y',strtotime($meta['date_out'])); ?></div>
+        <div class="small text-muted">
+          In: <?php echo date('M d, Y \a\t H:i',strtotime($meta['date_in'])); ?><br>
+          Out: <?php echo date('M d, Y \a\t H:i',strtotime($meta['date_out'])); ?>
+        </div>
         <div class="small text-muted">Ref: <code><?php echo htmlspecialchars(trim($meta['ref_no'])); ?></code></div>
       </div>
     </div>
     <?php if ($meta['special_requests']): ?>
     <div class="mt-2 border-top pt-2">
-      <small><i class="fa fa-comment-alt mr-1 text-info"></i><strong>Requests:</strong> <?php echo htmlspecialchars($meta['special_requests']); ?></small>
+      <small><i class="fa fa-comment-alt mr-1 text-info"></i><strong>Additional Notes:</strong> <?php echo nl2br(htmlspecialchars($meta['special_requests'])); ?></small>
     </div>
     <?php endif; ?>
   </div>

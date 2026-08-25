@@ -26,7 +26,7 @@ function v($meta, $key, $default = '') {
 
   <ul class="nav nav-tabs mb-3" id="guestTab">
     <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tab-basic">Basic Info</a></li>
-    <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-id">ID & Travel</a></li>
+    <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-id">ID &amp; Travel <span class="text-danger">*</span></a></li>
     <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-prefs">Preferences</a></li>
   </ul>
 
@@ -59,8 +59,8 @@ function v($meta, $key, $default = '') {
         </div>
         <div class="col-md-6">
           <div class="form-group">
-            <label>Phone</label>
-            <input type="text" name="phone" class="form-control" value="<?php echo v($meta,'phone'); ?>">
+            <label>Phone <span class="text-danger">*</span></label>
+            <input type="tel" name="phone" class="form-control" placeholder="e.g. 0712 345 678" value="<?php echo v($meta,'phone'); ?>" required>
           </div>
         </div>
       </div>
@@ -119,8 +119,8 @@ function v($meta, $key, $default = '') {
         </div>
         <div class="col-md-6">
           <div class="form-group">
-            <label>ID Number</label>
-            <input type="text" name="id_number" class="form-control" value="<?php echo v($meta,'id_number'); ?>">
+            <label>ID Number <span class="text-danger">*</span></label>
+            <input type="text" name="id_number" class="form-control" placeholder="e.g. 12345678" value="<?php echo v($meta,'id_number'); ?>" required>
           </div>
         </div>
       </div>
@@ -181,6 +181,24 @@ $('.suggestion-btn').click(function() {
 
 $('#guest-form').submit(function(e) {
   e.preventDefault();
+
+  var name  = ($('[name="full_name"]').val() || '').trim();
+  var phone = ($('[name="phone"]').val()     || '').trim();
+  var idno  = ($('[name="id_number"]').val() || '').trim();
+  if (!name) {
+    $('#guestTab a[href="#tab-basic"]').tab('show');
+    alert_toast('Full name is required', 'warning'); $('[name="full_name"]').focus(); return;
+  }
+  if (!phone || phone.replace(/\D/g, '').length < 7) {
+    $('#guestTab a[href="#tab-basic"]').tab('show');
+    alert_toast('A valid phone number is required', 'warning'); $('[name="phone"]').focus(); return;
+  }
+  // ID Number lives on the second tab — switch to it so the user sees what is missing.
+  if (!idno) {
+    $('#guestTab a[href="#tab-id"]').tab('show');
+    alert_toast('ID / passport number is required', 'warning'); $('[name="id_number"]').focus(); return;
+  }
+
   start_load();
   var data = $(this).serialize();
   $.post('ajax.php?action=save_guest', data, function(resp) {

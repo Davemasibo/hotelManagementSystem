@@ -1,8 +1,11 @@
 <?php
 include('db_connect.php');
+require_once('reservation_helpers.php');
 $rid = (int)($_GET['rid'] ?? 0);
 $id  = (int)($_GET['id']  ?? 0);
 $meta = [];
+$times = reservation_time_defaults($conn);
+$today = date('Y-m-d');
 
 if ($id > 0) {
     $stmt = $conn->prepare("SELECT * FROM checked WHERE id=?");
@@ -13,6 +16,11 @@ if ($id > 0) {
     $calc_days = max(1, (int)round(abs(strtotime($meta['date_out']) - strtotime($meta['date_in'])) / 86400));
     $rooms = $conn->query("SELECT r.id, r.room, rc.name FROM rooms r LEFT JOIN room_categories rc ON r.category_id=rc.id WHERE r.status=0 OR r.id=$rid ORDER BY r.room");
 }
+
+// A new check-in may not be backdated. When editing an existing reservation the
+// stored (possibly earlier) date must stay selectable, so the floor drops to it.
+$existing_in = !empty($meta['date_in']) ? date('Y-m-d', strtotime($meta['date_in'])) : '';
+$min_date_in = ($existing_in !== '' && $existing_in < $today) ? $existing_in : $today;
 
 // Load preferences if guest_id exists
 $guest_prefs = [];
@@ -80,37 +88,69 @@ if (!empty($meta['guest_id'])) {
     <input type="text" name="name" class="form-control" value="<?php echo htmlspecialchars($meta['name']??''); ?>" required>
   </div>
 
-  <div class="form-group">
-    <label>Contact #</label>
-    <input type="text" name="contact" class="form-control" value="<?php echo htmlspecialchars($meta['contact_no']??''); ?>">
+  <div class="row">
+    <div class="col-md-6">
+      <div class="form-group">
+        <label>Phone Number <span class="text-danger">*</span></label>
+        <input type="tel" name="contact" class="form-control" placeholder="e.g. 0712 345 678"
+               value="<?php echo htmlspecialchars($meta['contact_no']??''); ?>" required>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="form-group">
+        <label>ID / Passport Number <span class="text-danger">*</span></label>
+        <input type="text" name="id_number" class="form-control" placeholder="e.g. 12345678"
+               value="<?php echo htmlspecialchars($meta['id_number']??''); ?>" required>
+      </div>
+    </div>
   </div>
 
   <div class="row">
     <div class="col-md-6">
       <div class="form-group">
-        <label>Check-In Date</label>
-        <input type="date" name="date_in" class="form-control"
-               value="<?php echo isset($meta['date_in']) ? date('Y-m-d',strtotime($meta['date_in'])) : date('Y-m-d'); ?>" required>
+        <!-- min blocks backdating in the picker; save_check_in() re-checks server-side. -->
+        <label>Check-In Date <span class="text-danger">*</span></label>
+        <input type="date" name="date_in" id="date-in-input" class="form-control"
+               min="<?php echo $min_date_in; ?>"
+               value="<?php echo isset($meta['date_in']) ? date('Y-m-d',strtotime($meta['date_in'])) : $today; ?>" required>
+        <?php if ($id <= 0): ?><small class="text-muted">Past dates are not allowed.</small><?php endif; ?>
       </div>
     </div>
     <div class="col-md-6">
       <div class="form-group">
-        <label>Check-In Time</label>
+        <label>Check-In Time <span class="text-danger">*</span></label>
         <input type="time" name="date_in_time" class="form-control"
-               value="<?php echo isset($meta['date_in']) ? date('H:i',strtotime($meta['date_in'])) : '14:00'; ?>" required>
+               value="<?php echo isset($meta['date_in']) ? date('H:i',strtotime($meta['date_in'])) : htmlspecialchars($times['in']); ?>" required>
       </div>
     </div>
   </div>
 
-  <div class="form-group">
-    <label>Days of Stay <span id="checkout-preview" class="text-muted small"></span></label>
-    <input type="number" name="days" id="days-input" min="1" class="form-control"
-           value="<?php echo isset($meta['date_in']) ? $calc_days : 1; ?>" required>
+  <div class="row">
+    <div class="col-md-6">
+      <div class="form-group">
+        <label>Days of Stay <span class="text-danger">*</span></label>
+        <input type="number" name="days" id="days-input" min="1" class="form-control"
+               value="<?php echo isset($meta['date_in']) ? $calc_days : 1; ?>" required>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="form-group">
+        <label>Check-Out Time <span class="text-danger">*</span></label>
+        <input type="time" name="date_out_time" id="out-time-input" class="form-control"
+               value="<?php echo isset($meta['date_out']) ? date('H:i',strtotime($meta['date_out'])) : htmlspecialchars($times['out']); ?>" required>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert border py-2" id="checkout-preview-box" style="background:var(--bg-elevated);border-color:var(--border-subtle)!important;color:var(--text-primary)">
+    <i class="fa fa-sign-out-alt mr-1"></i> Check-out: <strong id="checkout-preview">—</strong>
   </div>
 
   <div class="form-group">
-    <label>Special Requests</label>
-    <textarea name="special_requests" class="form-control" rows="2" placeholder="Any special requests or notes..."><?php echo htmlspecialchars($meta['special_requests']??''); ?></textarea>
+    <label>Additional Notes</label>
+    <textarea name="special_requests" class="form-control" rows="4"
+              placeholder="Special requests, and any other guests on this reservation — e.g. &quot;Travelling with family: Jane Doe (spouse), Amos Doe (son, 8). Requires an extra bed and a cot.&quot;"><?php echo htmlspecialchars($meta['special_requests']??''); ?></textarea>
+    <small class="text-muted">Use this to record accompanying guests / family members, extra beds, allergies or any other request.</small>
   </div>
 
   <!-- Estimated cost preview -->
@@ -128,14 +168,21 @@ var pricePerNight = <?php echo (float)($rm['price']??0); ?>;
 var pricePerNight = 0;
 <?php endif; ?>
 
+var MIN_DATE_IN = '<?php echo $min_date_in; ?>';
+
 function updateCostPreview() {
-  var days = parseInt($('#days-input').val()) || 1;
-  var dateIn = $('[name="date_in"]').val();
-  var timeIn = $('[name="date_in_time"]').val();
-  if (dateIn && timeIn) {
-    var checkoutDate = new Date(dateIn + 'T' + timeIn);
+  var days   = parseInt($('#days-input').val()) || 1;
+  var dateIn = $('#date-in-input').val();
+  var outT   = $('#out-time-input').val() || '11:00';
+  if (dateIn) {
+    // Check-out = check-in date + N nights, at the chosen check-out time.
+    var checkoutDate = new Date(dateIn + 'T00:00:00');
     checkoutDate.setDate(checkoutDate.getDate() + days);
-    $('#checkout-preview').text('— checkout: ' + checkoutDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}));
+    $('#checkout-preview').text(
+      checkoutDate.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) + ' at ' + outT
+    );
+  } else {
+    $('#checkout-preview').text('—');
   }
   if (pricePerNight > 0) {
     var total = (pricePerNight * days).toFixed(2);
@@ -144,7 +191,16 @@ function updateCostPreview() {
   }
 }
 
-$('#days-input, [name="date_in"], [name="date_in_time"]').on('change input', updateCostPreview);
+// Backdating guard: typing an older date bypasses the picker's `min`, so snap back.
+$('#date-in-input').on('change', function() {
+  if (this.value && this.value < MIN_DATE_IN) {
+    alert_toast('Check-in date cannot be in the past', 'warning');
+    this.value = MIN_DATE_IN;
+    updateCostPreview();
+  }
+});
+
+$('#days-input, #date-in-input, [name="date_in_time"], #out-time-input').on('change input', updateCostPreview);
 updateCostPreview();
 
 // Guest search autocomplete
@@ -158,7 +214,7 @@ $('#guest-search').on('input', function() {
       var html = '';
       guests.forEach(function(g) {
         var vip = g.is_vip ? '<span class="badge" style="background:#ffc107;color:#000;font-size:.6rem">VIP</span> ' : '';
-        html += '<a href="#" class="list-group-item list-group-item-action py-1 guest-pick" data-id="'+g.id+'" data-name="'+g.full_name+'">' +
+        html += '<a href="#" class="list-group-item list-group-item-action py-1 guest-pick" data-id="'+g.id+'" data-name="'+g.full_name+'" data-phone="'+(g.phone||'')+'" data-idno="'+(g.id_number||'')+'">' +
                 vip + g.full_name + '<small class="text-muted ml-2">' + (g.phone||g.email||'') + '</small></a>';
       });
       if (!html) html = '<div class="list-group-item text-muted">No guests found</div>';
@@ -174,6 +230,8 @@ $(document).on('click', '.guest-pick', function(e) {
   $('#guest-id').val(gid);
   $('#guest-search').val(name);
   $('[name="name"]').val(name);
+  if ($(this).data('phone')) $('[name="contact"]').val($(this).data('phone'));
+  if ($(this).data('idno'))  $('[name="id_number"]').val($(this).data('idno'));
   $('#guest-results').hide();
 });
 
@@ -189,6 +247,15 @@ function clearGuest() {
 
 $('#manage-check').submit(function(e) {
   e.preventDefault();
+  var name  = ($('[name="name"]').val()      || '').trim();
+  var phone = ($('[name="contact"]').val()   || '').trim();
+  var idno  = ($('[name="id_number"]').val() || '').trim();
+  var dIn   = $('#date-in-input').val();
+  if (!name)  { alert_toast('Enter the guest name', 'warning'); $('[name="name"]').focus(); return; }
+  if (!phone) { alert_toast('Phone number is required', 'warning'); $('[name="contact"]').focus(); return; }
+  if (phone.replace(/\D/g, '').length < 7) { alert_toast('Enter a valid phone number', 'warning'); $('[name="contact"]').focus(); return; }
+  if (!idno)  { alert_toast('ID / passport number is required', 'warning'); $('[name="id_number"]').focus(); return; }
+  if (!dIn || dIn < MIN_DATE_IN) { alert_toast('Check-in date cannot be in the past', 'warning'); $('#date-in-input').focus(); return; }
   start_load();
   $.ajax({
     url: 'ajax.php?action=save_check-in',

@@ -254,7 +254,8 @@ function loadDashboard() {
       d.current_guests.forEach(function(g) {
         var vip   = g.is_vip == 1 ? '<span class="badge-vip mr-1">VIP</span>' : '';
         var gname = vip + (g.guest_name || g.name);
-        var dout  = g.date_out ? g.date_out.substring(0,10) : '—';
+        // Show the check-out time alongside the date ("2026-08-25 11:00").
+        var dout  = g.date_out ? g.date_out.substring(0,16).replace('T',' ') : '—';
         rows += '<tr class="guest-row' + (g.is_vip==1?' vip':'') + '">' +
           '<td style="padding:10px 14px;"><strong>' + g.room + '</strong><br>' +
           '<small style="color:var(--text-muted);font-size:11px;">' + (g.category||'') + '</small></td>' +

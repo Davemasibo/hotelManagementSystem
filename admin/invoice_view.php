@@ -2,6 +2,7 @@
 include('db_connect.php');
 $id         = (int)($_GET['id']         ?? 0);
 $checked_id = (int)($_GET['checked_id'] ?? 0);
+$inv        = null;
 
 if ($id > 0) {
     $inv = $conn->query("SELECT i.*, c.ref_no, c.name AS guest_raw, c.date_in, c.date_out, c.contact_no,
@@ -110,8 +111,8 @@ $nights = max(1, (int)round((strtotime($inv['date_out']) - strtotime($inv['date_
       <table style="width:auto;margin-left:auto">
         <tr><td class="info-label" style="border:none;padding:2px 0 2px 20px">Booking Ref</td><td style="border:none;padding:2px 0;font-weight:600"><?php echo htmlspecialchars(trim($inv['ref_no'])); ?></td></tr>
         <tr><td class="info-label" style="border:none;padding:2px 0 2px 20px">Room</td><td style="border:none;padding:2px 0"><?php echo htmlspecialchars($inv['room']??''); ?> — <?php echo htmlspecialchars($inv['category']??''); ?></td></tr>
-        <tr><td class="info-label" style="border:none;padding:2px 0 2px 20px">Check-In</td><td style="border:none;padding:2px 0"><?php echo date('D, d M Y', strtotime($inv['date_in'])); ?></td></tr>
-        <tr><td class="info-label" style="border:none;padding:2px 0 2px 20px">Check-Out</td><td style="border:none;padding:2px 0"><?php echo date('D, d M Y', strtotime($inv['date_out'])); ?></td></tr>
+        <tr><td class="info-label" style="border:none;padding:2px 0 2px 20px">Check-In</td><td style="border:none;padding:2px 0"><?php echo date('D, d M Y 	 H:i', strtotime($inv['date_in'])); ?></td></tr>
+        <tr><td class="info-label" style="border:none;padding:2px 0 2px 20px">Check-Out</td><td style="border:none;padding:2px 0"><?php echo date('D, d M Y 	 H:i', strtotime($inv['date_out'])); ?></td></tr>
         <tr><td class="info-label" style="border:none;padding:2px 0 2px 20px">Nights</td><td style="border:none;padding:2px 0"><?php echo $nights; ?></td></tr>
         <?php if ($inv['due_date']): ?><tr><td class="info-label" style="border:none;padding:2px 0 2px 20px">Due Date</td><td style="border:none;padding:2px 0;color:#dc2626;font-weight:600"><?php echo date('d M Y', strtotime($inv['due_date'])); ?></td></tr><?php endif; ?>
       </table>
